@@ -1,0 +1,247 @@
+clc;
+clear all;
+%step 1 : source
+x0=randi([0,1],10^5,1);
+%step 2 encoder
+% Hamming(15,11) 
+G1511 =[  1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1;
+0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 0, 1;
+                    0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 1;
+                     0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1, 0; 
+                    0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 1, 1, 1;
+                      0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1, 0;
+                    0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 1, 0, 1;
+                     0, 0, 0, 0, 0, 0, 0, 1,0, 0, 0, 1, 0, 1, 1;
+                     0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0, 0;
+                    0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1, 0;
+                     0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 1, 1 ] ;
+ % Hamming(7,4) 
+ G74=[1,0,0,0,1,1,0; 0,1,0,0,1,0,1;0,0,1,0,0,1,1;0,0,0,1,1,1,1];
+ %v=uG  
+x1= reshape(x0,[],4);
+ x11=reshape(x0,[],4)*G74;
+ x02=[x0;0];
+ x2=reshape(x02,[],11);
+ x22=reshape(x02,[],11)*G1511;
+  x11 (x11 == 0) = 0;
+  x11 (x11 == 1) = 1;
+  x11 (x11 == 2) = 0;
+  x11 (x11 == 3) = 1;
+  x22 (x22 == 0) = 0;
+  x22 (x22 == 1) = 1;
+  x22 (x22 == 2) = 0;
+  x22 (x22 == 3) = 1;
+  x22 (x22 == 4) = 0;
+  x22 (x22 == 5) = 1;
+  x22 (x22 == 6) = 0;
+ %comparing x0,x1,x2 length
+ l0= length(x0(:));
+l1=  length(x11(:));
+ l2= length(x22(:));
+ %step 3 , Modulator , -1 for each 0
+ xmod0=x0;
+  xmod1=x11;
+   xmod2=x22;
+   %x0 with no-decode
+ xmod0 (xmod0 == 0) = -1;
+  xmod0 (xmod0 > 0) = 1;
+  %x1,2 with hamming coding
+ xmod1 (xmod1 == 0) = -1;
+  xmod2 (xmod2 == 0) = -1;
+  
+
+  co=0;
+  BER0 = zeros(1,11);
+BER1 = zeros(1,11);
+BER2 = zeros(1,11);
+  for SNR = 0:0.5:5;
+ co=co+1;
+  %step 4 , an AWGN channel simulation and passing the endocded signal
+  awgnchan = comm.AWGNChannel('NoiseMethod','Variance', ...
+'VarianceSource','Input port');
+  %just a numeric exmple
+  %sigma^2=var=1/SNR=1/10^(SNR(db)/10)
+  var = 1./(10.^(SNR/10)); 
+ y0 = awgnchan(x0,var);
+  y1 = awgnchan(x11,var);
+   y2 = awgnchan(x22,var);
+  %step5  detector
+  %for x0
+   xdemod0 (y0 >= 0) = 1;
+   xdemod0 (y0 < 0) = 0;
+   xdemod0=reshape( xdemod0,100000,1);
+     r0=xdemod0;
+   %for x1
+  y1 (y1 >= 0) = 1;
+  y1 (y1 < 0) = 0;
+   xdemod1=y1;
+   %for x2
+   y2 (y2 >= 0) = 1;
+  y2 (y2 < 0) = 0;
+   xdemod2=y2;
+   
+     %step6  decoder and error correction
+     %we shoul use syndrom for this step
+     %s=r.transpose of H
+     %H is [transpose of p | I]
+     p74=[ G74(1:4,5), G74(1:4,6), G74(1:4,7)];
+     H73=[p74',eye(3)];
+     p1511=[ G1511(1:11,12), G1511(1:11,13), G1511(1:11,14),G1511(1:11,15)];
+     H154=[p1511',eye(4)];
+     
+     s1=xdemod1*H73';
+     s1 (s1 == 0) = 0;
+     s1 (s1 == 1) = 1;
+     s1 (s1 == 2) = 0;
+     s1 (s1 == 3) = 1;
+     s1 (s1 == 4) = 0;
+     
+     s2=xdemod2*H154';
+  
+     s2 (s2 == 0) = 0;
+     s2 (s2 == 1) = 1;
+     s2 (s2 == 2) = 0;
+     s2 (s2 == 3) = 1;
+ %now we should make 2 coset leaders list.
+  %for 7 3 hamming
+s11=[0:7]';
+s11=de2bi(s11);
+u73=[0:127]';
+u73=de2bi(u73);
+%v is all of the possible syndrom of all of the possible messages
+v73=u73*H73';
+v73 (v73 == 0) = 0;
+v73 (v73 == 1) = 1;
+v73 (v73 == 2) = 0;
+v73 (v73 == 3) = 1;
+v73 (v73 == 4) = 0;
+k=0;
+%A1 is Coset Leader table 
+for j=1:8 
+for i= 1:128
+ if (v73(i,:)==s11(j,:))
+     k=k+1; 
+    a=1+(k-1)*7;
+    b=k*7;
+   A1(j,a:b)=u73(i,:);
+    
+ end
+end
+k=0;
+end
+for j=1:8 
+for k= 1:16
+   a=1+(k-1)*7;
+   b=k*7;
+  B1(j,k)=sum( A1(j,a:b));
+    
+end
+end
+ d1=B1';
+[leader,I]=min( d1);
+k1=I;
+a1(:,1)=1+(k1'-1)*7;
+   b1=k1'*7;
+   for j=1:8 
+  led1(j,:)= A1(j,a1(j,1):b1(j,1));
+   end
+%for 15 11 hamming
+s22=[0:15]';
+s22=de2bi(s22);
+
+u1511=[0:32763]';
+u1511=de2bi(u1511);
+v1511=u1511*H154';
+v1511 (v1511 == 0) = 0;
+v1511 (v1511 == 1) = 1;
+v1511 (v1511 == 2) = 0;
+v1511 (v1511== 3) = 1;
+v1511 (v1511 == 4) = 0;
+a=0;
+b=0;
+%v is all of the possible syndrom of all of the possible messages
+%A2 is Coset Leader table 
+k=0;
+for j=1:16 
+for i= 1:32764
+ if (v1511(i,:)==s22(j,:))
+     k=k+1; 
+    a=1+(k-1)*15;
+    b=k*15;
+   A2(j,a:b)=u1511(i,:);
+    
+ end
+end
+k=0;
+end
+
+
+for j=1:16
+for k= 1:1103
+   a=1+(k-1)*15;
+   b=k*15;
+  B2(j,k)=sum( A2(j,a:b));
+  
+end
+end
+ d2=B2';
+[leader2,I2]=min( d2);
+k2=I2;
+a2(:,1)=1+(k2'-1)*15;
+   b2=k2'*15;
+   for j=1:16 
+  led2(j,:)= A2(j,a2(j,1):b2(j,1));
+   end     
+    %hala bayad : 
+   %moghayese har satre si ba A1 va jaygozini leader ba oon.
+%7 4 hamming
+cx1=zeros(25000,7);
+cx2=zeros(9091,15);
+for j=1:8 
+for i= 1:25000
+   if (s11(j,:)==s1(i,:))
+   cx1(i,:)=xdemod1(i,:)-led1(j,:);
+   end
+  
+ end
+end
+%15  11 hamming
+for j=1:16
+for i= 1:9091
+   if (s22(j,:)==s2(i,:))
+   cx2(i,:)=xdemod2(i,:)-led2(j,:);
+   end
+ end
+end
+%now we have corrected x1 as cx1 and corrected x2 as cx2
+%first 4 bit of cx1 is correct reseived message
+%first 11 bit of cx2 is correct reseived message
+ r1(:,1:4)=  cx1(:,1:4);
+  r1 (r1 == -1) = 1;
+ r2(:,1:11)=  cx2(:,1:11);
+ r2 (r2 == -1) = 1;
+ 
+ %step 7
+ %comare rxi and xi bit by bit amd count error bits
+
+  %x1,2 with hamming coding
+ xmod1 (xmod1 == 0) = -1;
+  xmod2 (xmod2 == 0) = -1;
+   e0 = sum(abs(r0(:)- x0(:)));
+   e1 = sum(abs(r1(:) - x1(:)));
+   e2 = sum(abs(r2(:)- x2(:)));
+   
+   BER0(1,co)= e0/100000;
+   BER1(1 ,co)= e1/100000;
+   BER2(1,co) = e2/100000;
+  end   
+ % step 8 plot
+ % this step is done through the for loop in all of code!
+ %plot is done here
+ snr = 0:0.5:5;
+semilogy(snr,BER0,'diamond',snr,BER1,'p',snr,BER2,'h');
+xlabel('SNR(dB)')
+ylabel('Bit-Error-Rate(BER)')
+legend('no coding','ham 7, 4', 'ham 15, 11');
+grid on
+ylim([0.001 1]);
