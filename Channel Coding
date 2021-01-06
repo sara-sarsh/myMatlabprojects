@@ -245,3 +245,4 @@ ylabel('Bit-Error-Rate(BER)')
 legend('no coding','ham 7, 4', 'ham 15, 11');
 grid on
 ylim([0.001 1]);
+%----
